@@ -283,3 +283,19 @@ class H1Loss(object):
 
     def __call__(self, y_pred, y, h=None, **kwargs):
         return self.rel(y_pred, y, h=h)
+    
+#loss function with rel/abs Lp loss
+class weightedInt(object):
+    def __init__(self):
+        super().__init__()
+
+    def __call__(self, y_pred, y, **kwargs):
+        #return torch.nn.functional.mse_loss(y_pred, y)
+        diff = (y_pred - y) ** 2
+        T = y.shape[-1]
+        weights = torch.linspace(1, 1e-2, steps=T, device=y_pred.device, dtype=y_pred.dtype)
+        #weights = weights / weights.sum()  # Normalize weights to sum to 1
+        weights = weights.expand_as(diff)  # Expand to match the dimensions of diff
+        weighted_diff = diff * weights
+        weighted_sum = torch.sum(weighted_diff, dim=-1)
+        return torch.mean(weighted_sum)

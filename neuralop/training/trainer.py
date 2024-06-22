@@ -6,6 +6,7 @@ import pathlib
 from .callbacks import PipelineCallback
 import neuralop.mpu.comm as comm
 from neuralop.losses import LpLoss
+from tqdm import tqdm
 
 
 class Trainer:
@@ -148,7 +149,7 @@ class Trainer:
 
         errors = None
 
-        for epoch in range(self.n_epochs):
+        for epoch in tqdm(range(self.n_epochs)):
             if self.callbacks:
                 self.callbacks.on_epoch_start(epoch=epoch)
 
@@ -234,7 +235,7 @@ class Trainer:
 
             train_err /= len(train_loader)
             avg_loss /= n_samples
-
+            tqdm.write(f"Epoch {epoch + 1}/{self.n_epochs}: train_err={train_err:.4f}, avg_loss={avg_loss:.4f}, avg_lasso_loss={avg_lasso_loss:.4f}")
             if epoch % self.log_test_interval == 0:
                 if self.callbacks:
                     self.callbacks.on_before_val(

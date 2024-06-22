@@ -5,4 +5,4 @@ from .models import get_model
 from . import datasets
 from . import mpu
 from .training import Trainer, CheckpointCallback, IncrementalCallback
-from .losses import LpLoss, H1Loss, BurgersEqnLoss, ICLoss, WeightedSumLoss
+from .losses import LpLoss, H1Loss, BurgersEqnLoss, ICLoss, WeightedSumLoss, weightedInt
