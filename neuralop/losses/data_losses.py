@@ -283,19 +283,68 @@ class H1Loss(object):
 
     def __call__(self, y_pred, y, h=None, **kwargs):
         return self.rel(y_pred, y, h=h)
-    
-#loss function with rel/abs Lp loss
-class weightedInt(object):
-    def __init__(self):
-        super().__init__()
 
-    def __call__(self, y_pred, y, **kwargs):
-        #return torch.nn.functional.mse_loss(y_pred, y)
-        diff = (y_pred - y) ** 2
-        T = y.shape[-1]
-        weights = torch.linspace(1, 1e-2, steps=T, device=y_pred.device, dtype=y_pred.dtype)
-        #weights = weights / weights.sum()  # Normalize weights to sum to 1
-        weights = weights.expand_as(diff)  # Expand to match the dimensions of diff
-        weighted_diff = diff * weights
-        weighted_sum = torch.sum(weighted_diff, dim=-1)
-        return torch.mean(weighted_sum)
+def rbf_kernel_matrix(X, Y, sigma):
+    """
+    Compute the RBF kernel matrix between two sets of samples X and Y.
+    
+    Args:
+    - X (torch.Tensor): Samples from the first distribution, shape (n_samples_X, n_features).
+    - Y (torch.Tensor): Samples from the second distribution, shape (n_samples_Y, n_features).
+    - sigma (float): The bandwidth parameter for the RBF kernel.
+    
+    Returns:
+    - torch.Tensor: The RBF kernel matrix, shape (n_samples_X, n_samples_Y).
+    """
+    XX = torch.sum(X ** 2, dim=1, keepdim=True)
+    YY = torch.sum(Y ** 2, dim=1, keepdim=True)
+    distances = XX + YY.T - 2 * torch.mm(X, Y.T)
+    kernel_matrix = torch.exp(-distances / (2 * sigma ** 2))
+    return kernel_matrix
+
+def expected_rbf_kernel(X, Y, sigma):
+    """
+    Compute the expected RBF kernel E[k(x, y)] where x and y are samples
+    drawn from distributions represented by X and Y respectively.
+    
+    Args:
+    - X (torch.Tensor): Samples from the first distribution, shape (n_samples_X, n_features).
+    - Y (torch.Tensor): Samples from the second distribution, shape (n_samples_Y, n_features).
+    - sigma (float): The bandwidth parameter for the RBF kernel.
+    
+    Returns:
+    - float: The expected RBF kernel value.
+    """
+    kernel_matrix = rbf_kernel_matrix(X, Y, sigma)
+    expected_value = kernel_matrix.mean()
+    return expected_value
+
+
+class KernelScore(torch.nn.Module):
+    def __init__(self, sigma=1.0):
+        super().__init__()
+        self.sigma = sigma
+
+    def forward(self, x, y):
+        """
+        Forward method for pathwise MMD discriminators, which apply a scaling as the adversarial component. They
+        also have some initial point penalty.
+
+        :param x:   Path data, shape (batch, stream, channel). Must require grad for training
+        :param y:   Path data, shape (batch, stream, channel). Should not require grad
+        :return:    Mixture MMD + initial point loss
+        """
+        Nx = x.shape[0]
+        Ny = y.shape[0]
+
+        x_fidi = x.reshape((Nx, -1))
+        y_fidi = y.reshape((Ny, -1))
+
+        # Split x_fidi into two random sets
+        indices = torch.randperm(Nx)
+        x1 = x_fidi[indices[:Nx // 2]]
+        x2 = x_fidi[indices[Nx // 2:]]
+
+        E_k_x1_x2 = expected_rbf_kernel(x1, x2, self.sigma)
+        E_k_x_y = expected_rbf_kernel(x_fidi, y_fidi, self.sigma)
+        return E_k_x1_x2 - 2* E_k_x_y
